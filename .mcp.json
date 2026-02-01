@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "atlassian": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
+      "env": {
+        "CONFLUENCE_URL": "https://nota-dev.atlassian.net/wiki",
+        "CONFLUENCE_USERNAME": "${CONFLUENCE_EMAIL}",
+        "CONFLUENCE_API_TOKEN": "${CONFLUENCE_TOKEN}"
+      }
+    }
+  }
+}
