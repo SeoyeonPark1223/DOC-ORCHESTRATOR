@@ -21,6 +21,18 @@ set -a && source .env && set +a && pip install -q openai
 This loads environment variables from the project's `.env` file and installs dependencies.
 If `.env` is missing, inform the user to create one (see README.md for the template).
 
+**Required environment variables in `.env`:**
+```
+CONFLUENCE_URL=https://your-domain.atlassian.net
+CONFLUENCE_EMAIL=your-email@example.com
+CONFLUENCE_TOKEN=your-api-token
+OPENAI_API_KEY=your-openai-key
+```
+
+> **Note:** The `.mcp.json` maps these to the variable names each MCP server expects.
+> Do NOT check for `CONFLUENCE_USERNAME` or `CONFLUENCE_API_TOKEN` directly — those are
+> internal mappings handled by `.mcp.json`.
+
 ### Step 1: Gather Context (Optional Pre-input)
 
 Before processing meeting notes, ask the user if they already know which documents are relevant.
@@ -130,25 +142,30 @@ AskUserQuestion:
 
 ### Step 7: Apply Confluence Updates
 
-Execute user-approved changes:
+Execute user-approved changes using the **confluence-helper MCP tools**:
 
-> **RITICAL: Section-Only Updates**
->
-> When updating a Confluence page, you MUST:
-> 1. **Fetch the page in storage format** (set `convert_to_markdown: false`) to get the raw HTML/XML
-> 2. **Copy the ENTIRE existing content exactly as-is**
-> 3. **Only modify the specific sections** that need changes — leave all other sections completely untouched
-> 4. **Use `content_format: storage`** when calling confluence_update_page to preserve the original format
->
-> **NEVER:**
-> - Rewrite the entire page content
-> - Convert storage format to markdown and back — this destroys Jira macros, smart links, and special formatting
-> - Touch sections that don't need updates, even if they "look the same"
->
-> Confluence pages contain special macros (e.g., `<ac:structured-macro ac:name="jira">`) that will be **permanently broken** if you rewrite them. Always preserve the original XML structure for unchanged sections.
+**Use `mcp__confluence-helper__confluence_patch_section`** to update specific sections:
+```
+confluence_patch_section(
+    page_id="123456789",
+    section_title="Action items",      # The heading text to find
+    new_content="<ol><li>...</li></ol>", # New HTML content (without the heading)
+    version_comment="Updated from meeting 2026-02-04"
+)
+```
 
-1. Use confluence_update_page to update **only the affected sections** of each document — do NOT overwrite unrelated content
-2. Use confluence_add_comment to add a change log comment with this format:
+This tool automatically:
+- Fetches the page in storage format
+- Finds the section by heading title
+- Replaces only that section's content
+- Preserves all other content exactly as-is
+
+> **Why use confluence_patch_section instead of confluence_update_page?**
+>
+> The patch tool guarantees section-only updates. Using `confluence_update_page` directly
+> risks accidentally rewriting the entire page and breaking Jira macros, smart links, etc.
+
+After updating, use confluence_add_comment to add a change log comment with this format:
 
 ```
 📋 Auto-updated by Document Orchestrator
@@ -167,8 +184,19 @@ To revert: Use Confluence page history (⋯ menu → Page history)
 Summarize the update results:
 - List of updated documents with direct links
 - Summary of changes per document
-- Rollback instructions: "If any update is incorrect, go to the page → click ⋯ → Page history → Restore previous version"
+- Previous version numbers (so user can request revert if needed)
 - Any failed updates with error details
+
+**If the user wants to revert changes**, use `mcp__confluence-helper__confluence_restore_version`:
+```
+confluence_restore_version(
+    page_id="123456789",
+    version=11,  # The version number before your changes
+    message="Reverted: user requested rollback"
+)
+```
+
+This is preferred over telling the user to manually revert via Confluence UI.
 
 ## Audio Transcription
 
@@ -267,6 +295,9 @@ Record all update activities in the project's logs/ directory:
 
 ## Critical: Confluence Update Rules
 
+> **Note:** The `confluence_patch_section` helper tool handles this automatically.
+> This section explains the underlying issue for context.
+
 **DO NOT rewrite pages. ONLY patch specific sections.**
 
 Confluence pages contain complex XML structures including:
@@ -276,29 +307,21 @@ Confluence pages contain complex XML structures including:
 - Local IDs for collaborative editing
 - Nested list structures with preserved IDs
 
-**Correct update procedure:**
-1. Fetch page with `convert_to_markdown: false` to get storage (HTML/XML) format
-2. Identify the exact HTML block for the section you need to update
-3. Replace ONLY that block, keeping everything else byte-for-byte identical
-4. Submit with `content_format: storage`
+**Why this matters:** If you rewrite sections that weren't meant to change, Jira macros become plain text, smart links break, and collaborative editing metadata is lost.
 
-**Example - updating only Action Items section:**
-```
-# Original content (storage format)
-...<h2>Action items</h2><ac:task-list>...</ac:task-list><h2>Decisions</h2>...
+**Solution:** Use `confluence_patch_section` which handles all of this automatically.
 
-# Replace ONLY the task-list block:
-...<h2>Action items</h2><ol><li>New item 1</li><li>New item 2</li></ol><h2>Decisions</h2>...
-```
+## Helper MCP Tools (confluence-helper)
 
-**Why this matters:** If you rewrite sections that weren't meant to change, Jira macros become plain text, smart links break, and collaborative editing metadata is lost. Users will need to manually restore the page from version history.
+In addition to the standard `mcp-atlassian` tools, this skill uses **confluence-helper** MCP server (`scripts/helper_mcp.py`) which provides:
 
-## MCP Tool Limitations
+| Tool | Description |
+|------|-------------|
+| `confluence_patch_section` | Update only a specific section by heading title |
+| `confluence_get_history` | Get version history for a page |
+| `confluence_get_version_content` | Get content at a specific version |
+| `confluence_restore_version` | Restore a page to a previous version |
 
-The Confluence MCP tools do NOT support:
-- **Page version history** - Cannot fetch previous versions
-- **Restore to version** - Cannot programmatically revert changes
-
-If an update breaks a page, the user must manually restore via Confluence UI:
-1. Go to the page → click ⋯ menu → Page history
-2. Find the previous version → click Restore
+**Always prefer these tools over manual operations:**
+- Use `confluence_patch_section` instead of `confluence_update_page` for safer updates
+- Use `confluence_restore_version` instead of telling users to manually revert

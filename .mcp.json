@@ -5,7 +5,7 @@
       "command": "uvx",
       "args": ["mcp-atlassian"],
       "env": {
-        "CONFLUENCE_URL": "${CONFLUENCE_URL}/wiki",
+        "CONFLUENCE_URL": "https://nota-dev.atlassian.net/wiki",
         "CONFLUENCE_USERNAME": "${CONFLUENCE_EMAIL}",
         "CONFLUENCE_API_TOKEN": "${CONFLUENCE_TOKEN}"
       }
@@ -15,7 +15,7 @@
       "command": "python",
       "args": ["scripts/helper_mcp.py"],
       "env": {
-        "CONFLUENCE_URL": "${CONFLUENCE_URL}",
+        "CONFLUENCE_URL": "https://nota-dev.atlassian.net",
         "CONFLUENCE_EMAIL": "${CONFLUENCE_EMAIL}",
         "CONFLUENCE_TOKEN": "${CONFLUENCE_TOKEN}"
       }

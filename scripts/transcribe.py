@@ -24,7 +24,10 @@ import os
 import subprocess
 import tempfile
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# Korea Standard Time (UTC+9)
+KST = timezone(timedelta(hours=9))
 from pathlib import Path
 
 try:
@@ -157,7 +160,7 @@ def transcribe(audio_file_path: str) -> dict:
         "transcript": transcript,
         "source_file": audio_file_path,
         "duration_seconds": duration,
-        "processed_at": datetime.now().isoformat(),
+        "processed_at": datetime.now(KST).isoformat(),
     }
 
     if chunks_info:
