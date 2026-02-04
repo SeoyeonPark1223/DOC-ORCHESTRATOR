@@ -132,6 +132,21 @@ AskUserQuestion:
 
 Execute user-approved changes:
 
+> **RITICAL: Section-Only Updates**
+>
+> When updating a Confluence page, you MUST:
+> 1. **Fetch the page in storage format** (set `convert_to_markdown: false`) to get the raw HTML/XML
+> 2. **Copy the ENTIRE existing content exactly as-is**
+> 3. **Only modify the specific sections** that need changes — leave all other sections completely untouched
+> 4. **Use `content_format: storage`** when calling confluence_update_page to preserve the original format
+>
+> **NEVER:**
+> - Rewrite the entire page content
+> - Convert storage format to markdown and back — this destroys Jira macros, smart links, and special formatting
+> - Touch sections that don't need updates, even if they "look the same"
+>
+> Confluence pages contain special macros (e.g., `<ac:structured-macro ac:name="jira">`) that will be **permanently broken** if you rewrite them. Always preserve the original XML structure for unchanged sections.
+
 1. Use confluence_update_page to update **only the affected sections** of each document — do NOT overwrite unrelated content
 2. Use confluence_add_comment to add a change log comment with this format:
 
@@ -157,7 +172,13 @@ Summarize the update results:
 
 ## Audio Transcription
 
-When the user provides an audio file, use GPT-4o Transcribe for speech-to-text, then Claude analyzes the result:
+When the user provides an audio file, use GPT-4o Transcribe for speech-to-text, then Claude analyzes the result.
+
+**Requirements:**
+- `ffmpeg` must be installed (for audio duration detection and chunking long files)
+- `openai` Python package (installed via `pip install openai`)
+
+**Long audio support:** The script automatically handles audio files longer than 23 minutes by splitting them into chunks using ffmpeg, transcribing each chunk separately, and combining the results.
 
 1. Run the transcription script (always save to logs/ directory):
    ```
@@ -166,7 +187,9 @@ When the user provides an audio file, use GPT-4o Transcribe for speech-to-text, 
 2. The script outputs a JSON file with:
    - `transcript`: Raw full text transcription
    - `source_file`: Original audio file path
+   - `duration_seconds`: Total audio duration
    - `processed_at`: Timestamp
+   - `chunks`: (only for long audio) Number of chunks and chunk duration
 3. Read the transcript JSON via the Read tool
 4. Claude then analyzes the raw transcript to extract decisions, action items, and keywords (same as text input flow)
 
@@ -241,3 +264,41 @@ Record all update activities in the project's logs/ directory:
 - **Always show links**: When referencing any Confluence page, always include the full clickable URL.
 - **User confirmation required**: Never update a page without explicit user approval.
 - **Preserve formatting**: When updating a section, maintain the existing page formatting (headings, tables, etc.).
+
+## Critical: Confluence Update Rules
+
+**DO NOT rewrite pages. ONLY patch specific sections.**
+
+Confluence pages contain complex XML structures including:
+- Jira ticket macros (`<ac:structured-macro ac:name="jira">`)
+- Smart links with card appearances
+- Emoji macros (`<ac:emoticon>`)
+- Local IDs for collaborative editing
+- Nested list structures with preserved IDs
+
+**Correct update procedure:**
+1. Fetch page with `convert_to_markdown: false` to get storage (HTML/XML) format
+2. Identify the exact HTML block for the section you need to update
+3. Replace ONLY that block, keeping everything else byte-for-byte identical
+4. Submit with `content_format: storage`
+
+**Example - updating only Action Items section:**
+```
+# Original content (storage format)
+...<h2>Action items</h2><ac:task-list>...</ac:task-list><h2>Decisions</h2>...
+
+# Replace ONLY the task-list block:
+...<h2>Action items</h2><ol><li>New item 1</li><li>New item 2</li></ol><h2>Decisions</h2>...
+```
+
+**Why this matters:** If you rewrite sections that weren't meant to change, Jira macros become plain text, smart links break, and collaborative editing metadata is lost. Users will need to manually restore the page from version history.
+
+## MCP Tool Limitations
+
+The Confluence MCP tools do NOT support:
+- **Page version history** - Cannot fetch previous versions
+- **Restore to version** - Cannot programmatically revert changes
+
+If an update breaks a page, the user must manually restore via Confluence UI:
+1. Go to the page → click ⋯ menu → Page history
+2. Find the previous version → click Restore
