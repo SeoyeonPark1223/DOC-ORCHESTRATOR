@@ -33,6 +33,7 @@ Copy the template below and fill in your credentials:
 
 ```bash
 # .env
+CONFLUENCE_URL=https://your-domain.atlassian.net
 CONFLUENCE_EMAIL=your-email@company.com
 CONFLUENCE_TOKEN=your-atlassian-api-token
 OPENAI_API_KEY=your-openai-api-key
@@ -111,18 +112,6 @@ Every run generates log files in `logs/`:
 
 - `*_transcript.json` — Raw transcription from audio input
 - `*_update.json` — Full record of what was analyzed, proposed, applied, and skipped
-
-## Configuration
-
-### Confluence URL
-
-The default Confluence URL is set in `.mcp.json`:
-
-```json
-"CONFLUENCE_URL": "https://nota-dev.atlassian.net/wiki"
-```
-
-Change this to your Confluence instance URL if different.
 
 ## Troubleshooting
 
