@@ -42,7 +42,7 @@ def get_confluence() -> Confluence:
     """Get or create Confluence client."""
     global _confluence_client
     if _confluence_client is None:
-        url = "https://nota-dev.atlassian.net"
+        url = os.environ.get("CONFLUENCE_URL")
         if not url:
             raise ValueError("CONFLUENCE_URL environment variable must be set")
         email = os.environ.get("CONFLUENCE_EMAIL")
