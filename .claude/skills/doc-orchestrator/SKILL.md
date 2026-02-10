@@ -69,17 +69,66 @@ AskUserQuestion:
   - Text/transcript file path → Read the file
   - Paste text directly
 
-After reading the meeting notes, extract:
-- Key decisions made
-- Action items
-- Keywords/topics that may require document updates
+After reading the meeting notes, store the raw transcript text for classification in the next steps.
+
+### Step 2.5: Classify Meeting
+
+Classify the meeting transcript using the two lightweight classifiers. These are pure prompt-based — no page fetching.
+
+1. Read `domains/classifiers/topic.md` (relative to this SKILL.md file)
+2. Apply the topic classifier to the raw transcript → outputs `topics: [...]` (1-2 topics from: Weekly Progress, Sprint Planning, Scenario & Product, Technical Design, Experiment & Validation)
+3. Read `domains/classifiers/part.md`
+4. Apply the part classifier to the raw transcript → outputs `parts: [...]` (1-3 parts from: Q, GO, MR, ME, SWE)
+
+Store both classification results for the next step.
+
+### Step 2.6: Domain-Aware Analysis
+
+For each classified part, load its specialized agent and analyze the transcript.
+
+1. Read `domains/cross-cut/scenarios.md` — this shared S0-S3 context is always loaded
+2. For each part in the classification result:
+   a. Read the corresponding agent file: `domains/agents/{part_code}.md` (where part_code is one of: q, go, mr, me, swe — lowercase)
+   b. Analyze the transcript from that part's perspective using:
+      - The agent's **baked-in domain glossary** to correctly interpret terminology
+      - The **per-topic focus** instructions matching the classified topics
+      - The **S0-S3 cross-cut context** from scenarios.md
+   c. Based on the classified topics, identify which **reference pages** to fetch from the agent's reference table
+   d. Fetch relevant reference pages via `confluence_get_page` (page IDs listed in the agent file)
+   e. Use the reference page content to enrich the analysis (verify current state of docs, compare with decisions)
+   f. Produce part-specific output: decisions, action items, keywords, reference pages, cross-cut impacts
+
+### Step 2.7: Combine & Cross-Cut Check
+
+Merge the outputs from all activated part agents into a unified analysis.
+
+1. **Merge decisions**: combine all part-specific decisions, noting which part identified each
+2. **Merge action items**: combine and deduplicate (same action may be detected by multiple parts)
+3. **Merge keywords**: combine domain-specific search keywords from all parts
+4. **Merge reference pages**: collect all reference page IDs that were fetched or recommended
+5. **Cross-cut check**: review all `cross_cut_impacts` from part agents:
+   - If any decision affects S0-S3 scenario definitions → flag for scenario doc updates
+   - If any decision affects the shared pipeline flow → flag for pipeline doc updates
+   - If any decision affects multiple parts → flag for cross-part coordination
+6. Produce unified output:
+   - Combined decisions list
+   - Combined action items list
+   - Combined search keywords (domain-aware, not generic)
+   - Combined reference page IDs (already fetched)
+   - Cross-cut impact summary
 
 ### Step 3: Find Related Confluence Documents
 
-Search Confluence for documents related to the extracted keywords.
+Search Confluence for documents related to the combined keywords from the domain-aware analysis. All searches are scoped to the **NPP02** (NetsPresso Platform Team) space.
 
-1. Use confluence_search with keyword-based queries (multiple queries for different decision topics)
-2. Merge search results with pinned documents from Step 1 (deduplicate by page ID)
+1. Use confluence_search with keyword-based queries, scoped to `space=NPP02`:
+   - Use the domain-specific keywords from Step 2.7 (not generic meeting keywords)
+   - Run multiple queries for different decision topics
+   - Include reference page IDs from part agents as known-relevant pages
+2. Merge search results with:
+   - Pinned documents from Step 1 (if any)
+   - Reference pages already fetched in Step 2.6
+   - Deduplicate by page ID
 3. Select the most relevant documents from combined results (max 10)
 4. Present the document list to the user with verification links
 
