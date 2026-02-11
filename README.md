@@ -86,6 +86,10 @@ Both formats are supported:
 - Full URL: `https://your-domain.atlassian.net/wiki/spaces/SPACE/pages/123456/Title`
 - Short URL: `https://your-domain.atlassian.net/wiki/x/AbCdEf`
 
+## Architecture
+
+에이전트/분류기 기반의 내부 동작 방식은 [DESIGN.md](DESIGN.md)를 참고하세요.
+
 ## Project Structure
 
 ```
@@ -95,15 +99,30 @@ doc-orchestrator/
 ├── .gitignore
 ├── requirements.txt                   # Python dependencies (openai)
 ├── README.md
+├── DESIGN.md                          # Agent & Classifier architecture
 ├── scripts/
-│   └── transcribe.py                  # Audio → text transcription
+│   ├── transcribe.py                  # Audio → text transcription
+│   └── helper_mcp.py                  # Confluence helper MCP server
 ├── logs/                              # Auto-generated logs (not in git)
 │   ├── YYYY-MM-DD_HH-MM_transcript.json
+│   ├── YYYY-MM-DD_HH-MM_meeting_analysis.json
 │   └── YYYY-MM-DD_HH-MM_update.json
 └── .claude/
     └── skills/
         └── doc-orchestrator/
-            └── SKILL.md               # Main skill prompt
+            ├── SKILL.md               # Main skill prompt
+            └── domains/
+                ├── classifiers/
+                │   ├── topic.md       # Topic classifier (5 meeting types)
+                │   └── part.md        # Part classifier (5 domains)
+                ├── agents/
+                │   ├── q.md           # Quantization agent
+                │   ├── go.md          # Graph Optimization agent
+                │   ├── mr.md          # Model Representation agent
+                │   ├── me.md          # Model Engineering agent
+                │   └── swe.md         # Software Engineering agent
+                └── cross-cut/
+                    └── scenarios.md   # Shared S0-S3 context
 ```
 
 ## Logs
