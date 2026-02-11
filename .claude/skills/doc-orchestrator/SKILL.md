@@ -82,9 +82,9 @@ AskUserQuestion:
 두 개의 경량 classifier를 사용해 회의 트랜스크립트를 분류한다. 순수 프롬프트 기반으로 페이지 조회 없음.
 
 1. `domains/classifiers/topic.md` 읽기 (이 SKILL.md 파일 기준 상대 경로)
-2. 원본 트랜스크립트에 topic classifier 적용 → `topics: [...]` 출력 (1-2개, Weekly Progress / Sprint Planning / Scenario & Product / Technical Design / Experiment & Validation 중)
+2. 원본 트랜스크립트에 topic classifier 적용 → `topics: [...]` 출력 (해당하는 모든 topic 선택, Weekly Progress / Sprint Planning / Scenario & Product / Technical Design / Experiment & Validation 중)
 3. `domains/classifiers/part.md` 읽기
-4. 원본 트랜스크립트에 part classifier 적용 → `parts: [...]` 출력 (1-3개, Q / GO / MR / ME / SWE 중)
+4. 원본 트랜스크립트에 part classifier 적용 → `parts: [...]` 출력 (해당하는 모든 part 선택, Q / GO / MR / ME / SWE 중)
 
 분류 결과를 다음 단계를 위해 저장한다.
 
