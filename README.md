@@ -86,10 +86,6 @@ Both formats are supported:
 - Full URL: `https://your-domain.atlassian.net/wiki/spaces/SPACE/pages/123456/Title`
 - Short URL: `https://your-domain.atlassian.net/wiki/x/AbCdEf`
 
-## Architecture
-
-에이전트/분류기 기반의 내부 동작 방식은 [DESIGN.md](DESIGN.md)를 참고하세요.
-
 ## Project Structure
 
 ```
