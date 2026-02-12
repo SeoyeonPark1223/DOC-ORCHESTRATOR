@@ -35,10 +35,6 @@ CONFLUENCE_TOKEN=your-api-token
 OPENAI_API_KEY=your-openai-key
 ```
 
-> **Note:** The `.mcp.json` maps these to the variable names each MCP server expects.
-> Do NOT check for `CONFLUENCE_USERNAME` or `CONFLUENCE_API_TOKEN` directly — those are
-> internal mappings handled by `.mcp.json`.
-
 ### Step 1: 사전 컨텍스트 수집 (선택)
 
 회의록 처리 전, 사용자에게 관련 문서를 이미 알고 있는지 확인한다.

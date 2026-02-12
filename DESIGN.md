@@ -141,3 +141,117 @@ SWE Agent 출력 ─┘       - action_items 중복 제거
     └── cross-cut/
         └── scenarios.md              # S0-S3 공유 컨텍스트
 ```
+
+---
+
+# Design: MCP Architecture
+
+이 문서는 doc-orchestrator가 Confluence와 통신하기 위해 사용하는 **2개의 MCP 서버 구조** — 범용 `mcp-atlassian`과 프로젝트 전용 `confluence-helper` — 의 설계 배경과 동작 원리를 설명합니다.
+
+## 구조
+
+```
+Claude Code (host process)
+  │
+  ├── stdio pipe ↔  mcp-atlassian (uvx mcp-atlassian)
+  │                  ├── confluence_search
+  │                  ├── confluence_get_page
+  │                  ├── confluence_update_page
+  │                  ├── confluence_create_page
+  │                  └── confluence_add_comment
+  │
+  └── stdio pipe ↔  confluence-helper (python scripts/helper_mcp.py)
+                     ├── confluence_patch_section    ← 섹션 단위 패치
+                     ├── confluence_get_history       ← 버전 히스토리 조회
+                     ├── confluence_get_version_content
+                     └── confluence_restore_version   ← 버전 복원
+```
+
+두 서버 모두 `.mcp.json`에 선언되며, Claude Code가 시작할 때 각각 자식 프로세스로 spawn합니다. 프로세스 간 통신은 stdin/stdout 파이프를 통한 JSON-RPC입니다.
+
+## 왜 MCP 서버가 2개인가
+
+`mcp-atlassian`은 Confluence의 범용 CRUD를 제공하지만, doc-orchestrator에 필요한 **섹션 단위 패치**와 **버전 복원** 기능이 없습니다. 이를 보완하기 위해 `confluence-helper`를 별도로 구현했습니다.
+
+| 기능 | mcp-atlassian | confluence-helper | 이유 |
+|------|:---:|:---:|------|
+| 페이지 검색/조회 | ✅ | - | 표준 기능 |
+| 페이지 전체 업데이트 | ✅ | - | 표준 기능 |
+| **섹션만 패치** | ❌ | ✅ | Confluence API 자체에 섹션 패치 없음 → 서버 사이드 파싱 필요 |
+| **버전 히스토리** | ❌ | ✅ | mcp-atlassian 미지원 |
+| **버전 복원** | ❌ | ✅ | get → compare → update 3-step 트랜잭션 필요 |
+
+## confluence-helper가 직접 REST API를 호출하는 이유
+
+MCP 서버는 다른 MCP 서버를 호출할 수 없습니다. 각 MCP 서버는 독립 프로세스로, host(Claude Code)와만 통신하며 서로의 존재를 모릅니다.
+
+```
+ ✅ Claude Code → mcp-atlassian     (host가 tool 호출)
+ ✅ Claude Code → confluence-helper  (host가 tool 호출)
+ ❌ confluence-helper → mcp-atlassian (MCP 간 직접 호출 불가)
+```
+
+따라서 `confluence-helper`는 `atlassian-python-api` 라이브러리로 Confluence REST API를 직접 호출합니다.
+
+## stdio 통신 원리
+
+MCP의 stdio 모드에서 host와 서버는 **파이프**로 연결됩니다.
+
+```
+Claude Code                              helper_mcp.py
+  │                                          │
+  ├─ pipe(write) ──→ stdin (fd 0)  ──→  readline()에서 블로킹 대기
+  │                                          │
+  └─ pipe(read)  ←── stdout (fd 1) ←──  결과를 write + flush
+```
+
+`mcp.run()`이 하는 일:
+
+```
+while True:
+    line = stdin.readline()      ← 블로킹: 데이터 올 때까지 CPU 사용 없이 대기
+    request = json_rpc_parse(line)
+    result = call_tool(request)
+    stdout.write(json_rpc_response(result))
+```
+
+JSON-RPC는 JSON으로 함수 호출을 표현하는 프로토콜입니다:
+
+```json
+// 요청 (Claude Code → helper_mcp.py stdin)
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+ "params": {"name": "confluence_patch_section",
+            "arguments": {"page_id": "123", "section_title": "Action items", ...}}}
+
+// 응답 (helper_mcp.py stdout → Claude Code)
+{"jsonrpc": "2.0", "id": 1,
+ "result": {"content": [{"type": "text", "text": "{\"success\": true}"}]}}
+```
+
+HTTP 서버와 달리 포트를 열지 않고, OS 파이프로 통신하는 로컬 프로세스 간 RPC입니다.
+
+## confluence_patch_section 동작 원리
+
+Confluence 페이지에는 Jira 매크로, smart link, 이모지 등 복잡한 XML이 포함됩니다. 전체 페이지를 교체하면 이런 구조가 깨지므로, 변경이 필요한 섹션만 정확히 교체해야 합니다.
+
+```
+1. REST API로 storage format(raw XML) 가져오기
+2. 정규식으로 헤딩 제목 매칭 → 섹션 경계(시작~다음 헤딩) 탐지
+3. 해당 섹션 내용만 교체, 헤딩 태그와 나머지 페이지는 그대로 보존
+4. storage format 그대로 REST API로 업데이트
+```
+
+이 전체 과정이 한 번의 MCP tool 호출 안에서 원자적으로 실행됩니다.
+
+## 전체 흐름
+1. Claude Code 시작
+2. .mcp.json 읽음
+3. subprocess.Popen("python", "scripts/helper_mcp.py") → 자식 프로세스 생성, pipe 연결
+4. helper_mcp.py: mcp.run() → stdin.readline()에서 블로킹 대기
+5. 사용자가 "이 섹션 업데이트해줘" 요청
+6. Claude가 confluence_patch_section tool 호출 결정
+7. Claude Code가 JSON-RPC 요청을 helper_mcp.py의 stdin pipe에 write
+8. helper_mcp.py: readline() 반환 → 파싱 → confluence_patch_section() 실행 → Confluence API 호출
+9. 결과를 stdout에 JSON-RPC로 write
+10. Claude Code가 pipe에서 read → Claude에게 전달
+11. 다시 4번으로 돌아가서 대기
